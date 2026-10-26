@@ -161,6 +161,22 @@
       "enabled": true
     },
     {
+      "id": "x_refresh",
+      "name": "Weekly research refresh",
+      "description": "Sunday 21:00 SGT. Retires expired search_insights rows, researches the week ahead on the web (prices, Fed and data calendar, analyst views, oil, Singapore news) and stores dated, sourced rows. Uses the Anthropic key with web search.",
+      "script": "x_agent/x_engine.py",
+      "args": [
+        "refresh"
+      ],
+      "schedule": {
+        "type": "weekly",
+        "day": "sun",
+        "time": "21:00"
+      },
+      "timeout": 900,
+      "enabled": true
+    },
+    {
       "id": "x_weekly",
       "name": "X weekly look-back",
       "description": "Monday summary of the X week: what worked, test verdicts, whether Threads winners carry over.",

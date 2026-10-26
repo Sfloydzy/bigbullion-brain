@@ -263,9 +263,13 @@ X_SYSTEM = (
     f"enlarged); {brandkit.B['x_rules']}. Reply with only a JSON list.")
 
 
+EXTRA_TESTS = []  # test ideas the weekly look-back added to search_insights (kind=test)
+
+
 def pick_tests(db, n):
     counts = Counter(r["test"] for r in db.execute("SELECT test FROM x_posts WHERE test IS NOT NULL AND test!=''"))
-    return sorted(CFG["test_menu"], key=lambda t: (counts[t], CFG["test_menu"].index(t)))[:n]
+    menu = list(CFG["test_menu"]) + [t for t in EXTRA_TESTS if t not in CFG["test_menu"]]
+    return sorted(menu, key=lambda t: (counts[t], 0 if t in EXTRA_TESTS else 1, menu.index(t)))[:n]  # new weekly ideas go first among untried tests
 
 
 def valid_x(text, seen):
@@ -303,8 +307,20 @@ def rewrite(items, ctx, key, seen):
     return out
 
 
-def plan(db, tdb, key, sess, sheet, dry=False, force=False, top_up=False, day_offset=0):
+def plan(db, tdb, key, sess, sheet, dry=False, force=False, top_up=False, day_offset=0, replace=False):
     today = now_sgt().date() + timedelta(days=day_offset)  # day_offset 1 plans tomorrow's slots ahead of time
+    gone = set()
+    if replace:  # retire this day's scheduled (not yet posted) rows, keep them for history, and write fresh ones in the freed slots
+        gone = {r["qid"] for r in db.execute("SELECT qid FROM x_posts WHERE day=? AND status='scheduled'", (today.isoformat(),))}
+        print(f"Replacing {len(gone)} scheduled posts for {today}{' [dry run, nothing changed]' if dry else ''}.")
+        if gone and not dry:
+            db.execute("UPDATE x_posts SET status='replaced' WHERE day=? AND status='scheduled'", (today.isoformat(),))
+            db.execute("DELETE FROM x_reserves WHERE day=?", (today.isoformat(),))
+            db.commit()
+            for n, r in read_tab(sess, sheet):
+                if r.get("id", "").strip() in gone:
+                    update_row(sess, sheet, n, {"status": "replaced", "approved": "FALSE"})
+        top_up = True
     if not (force or top_up) and db.execute("SELECT COUNT(*) c FROM x_posts WHERE day=?", (today.isoformat(),)).fetchone()["c"]:
         print(f"{today} is already planned. Use --force to plan again.")
         return
@@ -317,8 +333,8 @@ def plan(db, tdb, key, sess, sheet, dry=False, force=False, top_up=False, day_of
     slots = [s for s in order if datetime.combine(today, datetime.strptime(s, "%H:%M").time(), SGT) > cutoff][:CFG["posts_per_day"]]
     taken, base = set(), 0
     if top_up:  # add posts for free slots only; never touch rows already planned or posted today
-        rows_today = db.execute("SELECT slot FROM x_posts WHERE day=?", (today.isoformat(),)).fetchall()
-        taken, base = {r["slot"] for r in rows_today}, len(rows_today)
+        rows_today = db.execute("SELECT slot, status, qid FROM x_posts WHERE day=?", (today.isoformat(),)).fetchall()
+        taken, base = {r["slot"] for r in rows_today if r["status"] != "replaced" and r["qid"] not in gone}, len(rows_today)
         slots = [s for s in slots if f"{today} {s}" not in taken]
     if not slots:
         print("No slots left today.")
@@ -419,8 +435,9 @@ def add_insights(sess, sheet, items):
 
 def refresh_market_notes(sess, sheet):
     """Brand notes plus every search_insights row marked status=use and not expired. Returns research learnings for the writer."""
-    global MARKET_NOTES, MARKET_NUMS
+    global MARKET_NOTES, MARKET_NUMS, EXTRA_TESTS
     today = datetime.now(SGT).date().isoformat()
+    EXTRA_TESTS = []
     notes = [m for m in brandkit.B.get("market_notes", []) if _live(m, today)]
     learnings = []
     try:
@@ -432,14 +449,30 @@ def refresh_market_notes(sess, sheet):
         txt = r.get("insight", "").strip()
         if not txt or r.get("status", "").strip().lower() != "use" or not _live(r, today):
             continue
-        if r.get("kind", "").strip().lower() == "learning":
+        kind = r.get("kind", "").strip().lower()
+        if kind == "learning":
             learnings.append(txt)
+        elif kind == "test":
+            if txt not in CFG["test_menu"] and txt not in EXTRA_TESTS:
+                EXTRA_TESTS.append(txt)
         else:
             notes.append({"source": r.get("source", "").strip(), "date": r.get("date", "").strip(), "note": txt})
     MARKET_NOTES = notes
     MARKET_NUMS = th._nums(" ".join(m.get("note", "") for m in notes)) | th._nums(" ".join(brandkit.B.get("allowed_figures", [])))
-    print(f"Market notes in use: {len(notes)}. Research learnings: {len(learnings)}.")
+    print(f"Market notes in use: {len(notes)}. Research learnings: {len(learnings)}. Extra tests: {len(EXTRA_TESTS)}.")
     return learnings
+
+
+NEVER_NAME = [n.lower() for n in brandkit.B.get("never_name", [])]
+DATE_RE = re.compile(r"\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}\b|\b20\d\d\b", re.I)
+
+
+def names_ok(text):
+    """Posts may not name other companies, publications or people, or carry calendar dates, when the brand lists never_name."""
+    if not NEVER_NAME:
+        return True
+    low = text.lower()
+    return not any(re.search(r"\b" + re.escape(n) + r"\b", low) for n in NEVER_NAME) and not DATE_RE.search(text)
 
 
 def money_ok(text):
@@ -452,14 +485,15 @@ def money_ok(text):
 
 def native_system():
     facts = brandkit.B.get("author_facts", [])
-    notes = "; ".join(f"{m.get('source')} ({m.get('date')}): {m.get('note')}" for m in MARKET_NOTES)
+    notes = "; ".join(f"{m.get('note')} [from {m.get('date')}]" for m in MARKET_NOTES)
     return (f"You write original posts for X (Twitter) for {brandkit.B['name']}. {brandkit.B['author_story']} Topics: {brandkit.TOPICS}. "
             f"Voice: {brandkit.B['voice']} X style: one idea, the sharpest line first, no warm-up, line breaks allowed. "
             "Hard rules: at most {max} characters; no hashtags; no links; at most one emoji and usually none; no em dashes or long "
             f"dashes; {brandkit.B['first_person_rule']}; {brandkit.B['post_rules']} "
             + (f"FACTS you may use (true): {' '.join(facts)} " if facts else "")
-            + (f"MARKET NOTES (the only analyst views and figures you may use; always name the source and date, and present it as "
-               f"their view, never ours): {notes} " if notes else "There are no market notes right now, so make no price forecasts "
+            + (f"MARKET NOTES (the only analyst views and figures you may use). Restate each in plain words WITHOUT naming any company, "
+               f"publication, bank, analyst or person, and WITHOUT calendar dates or years: say 'analysts', 'a weekly survey', 'traders', "
+               f"'last week', 'on Wednesday'. Present it as their view, never ours: {notes} " if notes else "There are no market notes right now, so make no price forecasts "
                "and quote no prices, returns or percentages. ")
             + "Reply with only a JSON list.")
 
@@ -496,14 +530,14 @@ def plan_native(db, key, sess, sheet, today, slots, base, xinfo, dry):
             continue
         for r in res:
             t = clean((r.get("text") or "").strip())
-            if r.get("pillar") in pillars and valid_x(t, seen + [g["text"] for g in good]) and th.facts_only(t) and money_ok(t):
+            if r.get("pillar") in pillars and valid_x(t, seen + [g["text"] for g in good]) and th.facts_only(t) and money_ok(t) and names_ok(t):
                 good.append({"text": t, "pillar": r["pillar"], "hook": r.get("hook") if r.get("hook") in th.HOOKS else "other",
                              "test": r.get("test") if r.get("test") in tests else ""})
             else:
                 print(f"Dropped: {t[:90]!r}")
         if len(good) >= len(slots):
             break
-        user["task"] += f" Some drafts broke a rule (length, banned phrase, a number not in the notes, or too close to another post). Write {len(slots) - len(good)} more."
+        user["task"] += f" Some drafts broke a rule (length, banned phrase, a number not in the notes, a company, publication or person named, a calendar date, or too close to another post). Write {len(slots) - len(good)} more."
     if not good:
         print("No valid native posts.")
         return
@@ -527,6 +561,107 @@ def plan_native(db, key, sess, sheet, today, slots, base, xinfo, dry):
     print(f"Planned {len(rows)} native X posts for {today} ({len(spare)} reserves){' [dry run]' if dry else ''}:")
     for r in sorted(rows, key=lambda r: r[1]):
         print(f"\n{r[1]}  ({r[3]} chars)  {r[7]}\n{r[2]}")
+
+
+# ---------------------------------------------------------------- weekly refresh of search_insights
+RESEARCH_BRIEF = ("current price levels and the week's move; this week's central bank, inflation and jobs events and what the market expects; "
+                  "named analyst views and forecasts with dates; demand data such as central bank buying and ETF flows; "
+                  "oil and geopolitical news that is moving the market; local news for the brand's home market")
+
+
+def claude_web(system, user, key, model, max_uses=12, max_tokens=8000):
+    """Claude with the web search tool. Server side searches run inside one request; a paused turn is continued."""
+    msgs, text = [{"role": "user", "content": user}], ""
+    for _ in range(5):
+        body = json.dumps({"model": model, "max_tokens": max_tokens, "system": system, "messages": msgs,
+                           "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": max_uses}]}).encode()
+        req = urllib.request.Request("https://api.anthropic.com/v1/messages", data=body, method="POST",
+                                     headers={"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=600) as r:
+                data = json.loads(r.read().decode())
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f"Claude API HTTP {e.code}: {e.read().decode()[:300]}") from None
+        text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
+        if data.get("stop_reason") != "pause_turn":
+            break
+        msgs.append({"role": "assistant", "content": data["content"]})
+    return text
+
+
+def last_json_list(text):
+    a, b = text.find("[{"), text.rfind("}]")
+    if a < 0 or b < a:
+        raise RuntimeError("No JSON list in the research reply.")
+    return json.loads(text[a:b + 2])
+
+
+def retire_expired(sess, sheet):
+    """Mark use/watch rows whose expiry has passed as stale (kept for history, ignored by the writer)."""
+    today = datetime.now(SGT).date().isoformat()
+    r = sess.get(f"{SHEETS_BASE}/{sheet}/values/{INSIGHT_TAB}!A1:Z1")
+    r.raise_for_status()
+    head = [h.strip().lower() for h in (r.json().get("values") or [[]])[0]]
+    if "status" not in head:
+        return 0
+    col = col_letter(head.index("status"))
+    data = [{"range": f"{INSIGHT_TAB}!{col}{row['_row']}", "values": [["stale"]]} for row in load_insights(sess, sheet)
+            if row.get("status", "").strip().lower() in ("use", "watch") and row.get("expires", "").strip() and row["expires"].strip() < today]
+    if data:
+        sess.post(f"{SHEETS_BASE}/{sheet}/values:batchUpdate", json={"valueInputOption": "RAW", "data": data}).raise_for_status()
+    return len(data)
+
+
+def refresh_week(db, key, sess, sheet):
+    """Sunday evening: retire expired rows, then research the week ahead on the web and store dated, sourced notes."""
+    gone = retire_expired(sess, sheet)
+    print(f"Retired {gone} expired insights.")
+    today = now_sgt().date()
+    brief = CFG.get("research_brief") or RESEARCH_BRIEF
+    system = (f"You are the market researcher for {brandkit.B['name']} ({brandkit.TOPICS}). Use web search to find what the brand's customers "
+              "and followers will be reading about this coming week. Report only figures, dates and quotes that appear in a page you actually "
+              "read; never your own forecasts or recollections. Prefer primary sources (central banks, statistics agencies, the EIA, the World "
+              "Gold Council, the LBMA) and established news (Reuters, Kitco, CNA, The Straits Times). Plain English, no em dashes, no hype. "
+              "Reply with only a JSON list, at most 14 items: [{\"date\": \"YYYY-MM-DD the source was published\", \"topic\": \"...\", "
+              "\"insight\": \"one or two sentences with the figures exactly as stated and who said it\", \"source\": \"publisher and named analyst\", "
+              "\"url\": \"...\", \"confidence\": \"high (primary source or two agreeing sources), medium or low\", "
+              "\"expires\": \"YYYY-MM-DD\"}]. expires: prices 7 days out, an event note the day after the event, an outlook report about 30 days, "
+              "leave blank only for lasting facts.")
+    user = f"Today is {today:%A %d %B %Y} in Singapore. Cover: {brief}. Skip anything you cannot source with a URL."
+    try:
+        items = last_json_list(claude_web(system, user, key, CFG["analyst_model"]))
+    except Exception as e:
+        print(f"Research refresh failed, keeping what is stored: {e}")
+        return
+    ok_date = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+    rows = []
+    for i in items:
+        txt, url = str(i.get("insight", "")).strip(), str(i.get("url", "")).strip()
+        if not txt or not str(i.get("source", "")).strip() or not url.startswith("http") or not ok_date.match(str(i.get("date", "")).strip()):
+            continue
+        exp = str(i.get("expires", "")).strip()
+        conf = str(i.get("confidence", "")).strip().lower().split(" ")[0]
+        rows.append({"date": i["date"].strip(), "kind": "market_note", "topic": str(i.get("topic", "")).strip(), "insight": clean(txt),
+                     "source": str(i["source"]).strip(), "url": url, "confidence": conf,
+                     "status": "use" if conf in ("high", "medium") else "watch",
+                     "expires": exp if ok_date.match(exp) else (today + timedelta(days=7)).isoformat(), "used_in_posts": ""})
+    added = add_insights(sess, sheet, rows)
+    print(f"Research refresh: {len(items)} found, {added} new rows added to {INSIGHT_TAB} ({sum(1 for r in rows if r['status'] == 'watch')} on watch).")
+
+
+def store_week_learnings(key, sess, sheet, stats, review_text):
+    """After the weekly look-back: store what to change as learning and test rows the writer reads from tomorrow."""
+    system = ("You turn a weekly X review into standing instructions for the post writer. Reply with only JSON: "
+              "{\"learnings\": [up to 3 one-sentence instructions, no figures, no em dashes], \"tests\": [up to 3 short test ideas phrased "
+              "like these: " + "; ".join(CFG["test_menu"][:3]) + "]}. Base them only on the review and numbers given.")
+    out = parse_json(claude(system, json.dumps({"review": review_text, "numbers": stats}), key, CFG["analyst_model"], 2000), "{")
+    today = now_sgt().date()
+    exp = (today + timedelta(days=8)).isoformat()
+    rows = [{"date": today.isoformat(), "kind": "learning", "topic": "weekly look-back", "insight": clean(str(t)), "source": "X weekly look-back",
+             "confidence": "measured", "status": "use", "expires": exp} for t in out.get("learnings", [])[:3] if str(t).strip()]
+    rows += [{"date": today.isoformat(), "kind": "test", "topic": "weekly look-back", "insight": clean(str(t)), "source": "X weekly look-back",
+              "confidence": "idea", "status": "use", "expires": exp} for t in out.get("tests", [])[:3] if str(t).strip()]
+    print(f"Weekly look-back stored {add_insights(sess, sheet, rows)} learnings and tests in {INSIGHT_TAB}.")
 
 
 # ---------------------------------------------------------------- publish
@@ -838,16 +973,22 @@ def weekly(db, key, sess, sheet):
     (X_HERE / "reviews" / f"x_weekly_{now_sgt():%Y-%m-%d}.md").write_text(body + "\n", encoding="utf-8")
     write_tab(sess, sheet, "x_weekly", [[line] for line in body.splitlines()])
     print(body)
+    if posts and key:
+        try:
+            store_week_learnings(key, sess, sheet, stats, clean(text))
+        except Exception as e:
+            print(f"Could not store the week's learnings: {e}")
 
 
 # ---------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["cycle", "publish", "review", "research", "plan", "learn", "weekly", "check", "insights"])
+    ap.add_argument("cmd", choices=["cycle", "publish", "review", "research", "plan", "learn", "weekly", "check", "insights", "refresh"])
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--top-up", action="store_true", help="plan: add posts only for free slots today, keep everything already planned")
     ap.add_argument("--day", choices=["today", "tomorrow"], default="today", help="plan: tomorrow plans the next day's slots now, so you can review them before they post")
+    ap.add_argument("--replace", action="store_true", help="plan: retire the day's scheduled posts and write fresh ones (use with --day tomorrow)")
     ap.add_argument("--no-search", action="store_true", help="research: rebuild the tab from stored posts, no new reads")
     ap.add_argument("--from", dest="src", help="insights: JSON list of rows to add to the search_insights tab")
     ap.add_argument("--db", default=str(DB_PATH))
@@ -870,6 +1011,8 @@ def main():
     if a.cmd == "insights":
         items = json.load(open(a.src, encoding="utf-8")) if a.src else []
         print(f"{add_insights(sess, sheet, items)} insights added to {INSIGHT_TAB}, {len(load_insights(sess, sheet))} stored.")
+    elif a.cmd == "refresh":
+        refresh_week(db, key, sess, sheet)
     elif a.cmd == "publish":
         publish(db, x, sess, sheet, a.dry_run)
     elif a.cmd == "review":
@@ -886,7 +1029,7 @@ def main():
                     fn()
                 except Exception as e:
                     print(f"{name} failed, carrying on: {e}")
-        plan(db, tdb, key, sess, sheet, a.dry_run, a.force, a.top_up, 1 if a.day == "tomorrow" else 0)
+        plan(db, tdb, key, sess, sheet, a.dry_run, a.force, a.top_up, 1 if a.day == "tomorrow" else 0, a.replace)
         print(f"Reads used today: {usage(db, 'reads')} of {CFG['max_reads_per_day']}.")
 
 
