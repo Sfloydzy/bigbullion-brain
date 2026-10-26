@@ -668,7 +668,7 @@ def refresh_week(db, key, sess, sheet):
 
 
 COMPETITOR_SYSTEM = (
-    "You study a competing bullion dealer's X posts from the past week to learn what earns engagement. Use only the posts and "
+    "You study a competing bullion dealer's recent X posts to learn what earns engagement. Use only the posts and "
     "numbers given; say when the sample is small. No em dashes. Reply with only JSON: {\"patterns\": [up to 4 one-sentence lessons on "
     "formats, topics, hooks, length or timing that worked or fell flat, written as instructions for our writer, no figures, never "
     "naming the competitor], \"tests\": [up to 2 short test ideas phrased like: under 120 characters; framed as a mistake people make]}.")
@@ -680,16 +680,22 @@ def competitor_week(db, x, key, sess, sheet):
         return
     competitors(db, x, datetime.now(UTC).isoformat())
     end = datetime.now(UTC) - timedelta(hours=24)        # posts younger than a day have unfinished metrics
-    rows = competitor_rows(db, end - timedelta(days=7), end)
+    allc = [r["created_at"] for r in db.execute("SELECT created_at FROM x_research WHERE query='competitor' ORDER BY created_at")]
+    if allc:
+        print(f"Competitor posts stored: {len(allc)}, from {allc[0][:10]} to {allc[-1][:10]}.")
+    for days in (7, 14, 30):  # a quiet week widens the window rather than comparing too few posts
+        rows = competitor_rows(db, end - timedelta(days=days), end)
+        if len(rows) >= 6:
+            break
     if len(rows) < 4 or not key:
-        print(f"Competitor review: {len(rows)} posts from last week, too few to compare.")
+        print(f"Competitor review: {len(rows)} posts in the last {days} days, too few to compare.")
         return
     def brief(r):
         return {"text": r["text"][:280], "posted_sgt": parse_ts(r["created_at"].replace("Z", "+00:00")).astimezone(SGT).strftime("%a %H:%M"),
                 "chars": len(r["text"]), "likes": r["likes"], "replies": r["replies"], "reposts": r["reposts"],
                 "bookmarks": r["bookmarks"], "impressions": r["impressions"]}
     k = min(8, len(rows) // 2)
-    payload = {"posts_last_week": len(rows), "best": [brief(r) for r in rows[:k]], "weakest": [brief(r) for r in rows[-k:]]}
+    payload = {"window_days": days, "posts_in_window": len(rows), "best": [brief(r) for r in rows[:k]], "weakest": [brief(r) for r in rows[-k:]]}
     try:
         out = parse_json(claude(COMPETITOR_SYSTEM, json.dumps(payload), key, CFG["analyst_model"], 2500), "{")
     except Exception as e:
@@ -698,11 +704,11 @@ def competitor_week(db, x, key, sess, sheet):
     today = now_sgt().date()
     exp = (today + timedelta(days=7)).isoformat()
     items = [{"date": today.isoformat(), "kind": "learning", "topic": "competitor review", "insight": "Competitor pattern, learn it, never copy or name them: " + clean(str(t)),
-              "source": f"competitor posts, last 7 days ({len(rows)} posts)", "confidence": "observed", "status": "use", "expires": exp}
+              "source": f"competitor posts, last {days} days ({len(rows)} posts)", "confidence": "observed", "status": "use", "expires": exp}
              for t in out.get("patterns", [])[:4] if str(t).strip()]
     items += [{"date": today.isoformat(), "kind": "test", "topic": "competitor review", "insight": clean(str(t)), "source": "competitor review",
                "confidence": "idea", "status": "use", "expires": exp} for t in out.get("tests", [])[:2] if str(t).strip()]
-    print(f"Competitor review: {len(rows)} posts compared, {add_insights(sess, sheet, items)} lessons and tests stored in {INSIGHT_TAB}.")
+    print(f"Competitor review: {len(rows)} posts from the last {days} days compared, {add_insights(sess, sheet, items)} lessons and tests stored in {INSIGHT_TAB}.")
 
 
 def store_week_learnings(key, sess, sheet, stats, review_text):
