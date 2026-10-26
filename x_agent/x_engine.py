@@ -590,10 +590,17 @@ def claude_web(system, user, key, model, max_uses=12, max_tokens=8000):
 
 
 def last_json_list(text):
-    a, b = text.find("[{"), text.rfind("}]")
-    if a < 0 or b < a:
-        raise RuntimeError("No JSON list in the research reply.")
-    return json.loads(text[a:b + 2])
+    """The JSON list of objects in a reply, however it is laid out or fenced."""
+    starts = [m.start() for m in re.finditer(r"\[\s*\{", text)]
+    ends = [m.end() for m in re.finditer(r"\}\s*\]", text)]
+    if not starts or not ends or ends[-1] < starts[0]:
+        raise RuntimeError(f"No JSON list in the research reply. It began: {text.strip()[:300]!r}")
+    for a in starts:
+        try:
+            return json.loads(text[a:ends[-1]])
+        except ValueError:
+            continue
+    raise RuntimeError(f"The research reply held a list that was not valid JSON. It began: {text[starts[0]:starts[0] + 200]!r}")
 
 
 def retire_expired(sess, sheet):
