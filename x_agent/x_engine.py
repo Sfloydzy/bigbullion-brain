@@ -667,6 +667,44 @@ def refresh_week(db, key, sess, sheet):
     print(f"Research refresh: {len(items)} found, {added} new rows added to {INSIGHT_TAB} ({sum(1 for r in rows if r['status'] == 'watch')} on watch).")
 
 
+COMPETITOR_SYSTEM = (
+    "You study a competing bullion dealer's X posts from the past week to learn what earns engagement. Use only the posts and "
+    "numbers given; say when the sample is small. No em dashes. Reply with only JSON: {\"patterns\": [up to 4 one-sentence lessons on "
+    "formats, topics, hooks, length or timing that worked or fell flat, written as instructions for our writer, no figures, never "
+    "naming the competitor], \"tests\": [up to 2 short test ideas phrased like: under 120 characters; framed as a mistake people make]}.")
+
+
+def competitor_week(db, x, key, sess, sheet):
+    """Weekly: read each competitor's last week of posts, compare best and weakest, store lessons and tests for the coming week."""
+    if not CFG.get("competitors"):
+        return
+    competitors(db, x, datetime.now(UTC).isoformat())
+    end = datetime.now(UTC) - timedelta(hours=24)        # posts younger than a day have unfinished metrics
+    rows = competitor_rows(db, end - timedelta(days=7), end)
+    if len(rows) < 4 or not key:
+        print(f"Competitor review: {len(rows)} posts from last week, too few to compare.")
+        return
+    def brief(r):
+        return {"text": r["text"][:280], "posted_sgt": parse_ts(r["created_at"].replace("Z", "+00:00")).astimezone(SGT).strftime("%a %H:%M"),
+                "chars": len(r["text"]), "likes": r["likes"], "replies": r["replies"], "reposts": r["reposts"],
+                "bookmarks": r["bookmarks"], "impressions": r["impressions"]}
+    k = min(8, len(rows) // 2)
+    payload = {"posts_last_week": len(rows), "best": [brief(r) for r in rows[:k]], "weakest": [brief(r) for r in rows[-k:]]}
+    try:
+        out = parse_json(claude(COMPETITOR_SYSTEM, json.dumps(payload), key, CFG["analyst_model"], 2500), "{")
+    except Exception as e:
+        print(f"Competitor review failed: {e}")
+        return
+    today = now_sgt().date()
+    exp = (today + timedelta(days=7)).isoformat()
+    items = [{"date": today.isoformat(), "kind": "learning", "topic": "competitor review", "insight": "Competitor pattern, learn it, never copy or name them: " + clean(str(t)),
+              "source": f"competitor posts, last 7 days ({len(rows)} posts)", "confidence": "observed", "status": "use", "expires": exp}
+             for t in out.get("patterns", [])[:4] if str(t).strip()]
+    items += [{"date": today.isoformat(), "kind": "test", "topic": "competitor review", "insight": clean(str(t)), "source": "competitor review",
+               "confidence": "idea", "status": "use", "expires": exp} for t in out.get("tests", [])[:2] if str(t).strip()]
+    print(f"Competitor review: {len(rows)} posts compared, {add_insights(sess, sheet, items)} lessons and tests stored in {INSIGHT_TAB}.")
+
+
 def store_week_learnings(key, sess, sheet, stats, review_text):
     """After the weekly look-back: store what to change as learning and test rows the writer reads from tomorrow."""
     system = ("You turn a weekly X review into standing instructions for the post writer. Reply with only JSON: "
@@ -884,8 +922,10 @@ def research(db, x, key, sess, sheet, no_search=False):
     if not no_search:
         got += watchlist(db, x, stamp)
     since = (datetime.now(UTC) - timedelta(hours=48)).isoformat()
-    rows = [dict(r) for r in db.execute("SELECT * FROM x_research WHERE collected_at>=? AND created_at>=?", (since, since))]
+    rows = [dict(r) for r in db.execute("SELECT * FROM x_research WHERE collected_at>=? AND created_at>=? AND query!='competitor'", (since, since))]
     me = (meta(db, "username") or "").lower()
+    rivals = {n.lstrip("@").lower() for n in CFG.get("competitors", [])}
+    rows = [r for r in rows if (r["author"] or "").lower() not in rivals]
     for r in rows:
         age = max((datetime.now(UTC) - parse_ts(r["created_at"].replace("Z", "+00:00"))).total_seconds() / 3600, 1)
         r["eng"] = (r["likes"] or 0) + 2 * (r["replies"] or 0) + 3 * (r["reposts"] or 0) + 3 * (r["quotes"] or 0) + 2 * (r["bookmarks"] or 0)
@@ -925,9 +965,10 @@ def watchlist(db, x, stamp):
     """Read the latest posts of the biggest-reach niche accounts research has found: reliable, fresh reply targets."""
     since = (datetime.now(UTC) - timedelta(days=7)).isoformat()
     rows = db.execute("""SELECT author, MAX(author_followers) f, MAX(impressions) imp FROM x_research
-        WHERE collected_at>=? AND author_followers BETWEEN 10000 AND 2000000 AND query!='watchlist' GROUP BY author
+        WHERE collected_at>=? AND author_followers BETWEEN 10000 AND 2000000 AND query NOT IN ('watchlist', 'competitor') GROUP BY author
         ORDER BY imp DESC LIMIT ?""", (since, CFG["watchlist_size"])).fetchall()
-    names = [r["author"] for r in rows if r["author"]]
+    rivals = {n.lstrip("@").lower() for n in CFG.get("competitors", [])}
+    names = [r["author"] for r in rows if r["author"] and r["author"].lower() not in rivals]
     if not names or usage(db, "reads") + len(names) * 6 > CFG["max_reads_per_day"]:
         return 0
     ids = json.loads(meta(db, "watch_ids") or "{}")
@@ -957,6 +998,50 @@ def watchlist(db, x, stamp):
     db.commit()
     print(f"Watchlist: {len(names)} accounts, {got} posts.")
     return got
+
+
+def competitors(db, x, stamp):
+    """Read the recent posts of the competitor accounts in x.json (competitors). Run weekly, so one read covers the whole week."""
+    names = [n.lstrip("@") for n in CFG.get("competitors", []) if n.strip()]
+    per = min(int(CFG.get("competitor_posts", 40)), 100)
+    if not names or usage(db, "reads") + len(names) * (per + 1) > CFG["max_reads_per_day"]:
+        return 0
+    got = 0
+    try:
+        ids = json.loads(meta(db, "competitor_ids") or "{}")
+        missing = [n for n in names if n not in ids]
+        if missing:
+            users = x.users_by(missing)
+            usage(db, "reads", len(users))
+            ids.update({u["username"]: {"id": u["id"], "f": u.get("public_metrics", {}).get("followers_count", 0)} for u in users})
+            meta(db, "competitor_ids", json.dumps(ids))
+        for n in names:
+            u = ids.get(n) or next((v for k, v in ids.items() if k.lower() == n.lower()), None)
+            if not u:
+                print(f"Competitor @{n} not found.")
+                continue
+            res = x.user_tweets(u["id"], per)
+            usage(db, "reads", len(res))
+            for t in res:
+                m = t["public_metrics"]
+                db.execute("INSERT OR REPLACE INTO x_research VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                           (t["id"], "competitor", "", n, u["f"], html.unescape(t["text"]), t["created_at"], m.get("like_count"), m.get("reply_count"),
+                            m.get("retweet_count"), m.get("quote_count"), m.get("bookmark_count"), m.get("impression_count"), stamp))
+            got += len(res)
+        db.commit()
+    except xclient.XError as e:
+        print(f"Competitor read failed: {e}")
+    print(f"Competitors: {len(names)} accounts, {got} posts.")
+    return got
+
+
+def competitor_rows(db, start, end):
+    """Competitor posts published between start and end (UTC datetimes), best engagement first."""
+    rows = [dict(r) for r in db.execute("SELECT * FROM x_research WHERE query='competitor' AND created_at>=? AND created_at<?",
+                                        (start.strftime("%Y-%m-%dT%H:%M:%S"), end.strftime("%Y-%m-%dT%H:%M:%S")))]
+    for r in rows:
+        r["eng"] = (r["likes"] or 0) + 2 * (r["replies"] or 0) + 3 * (r["reposts"] or 0) + 3 * (r["quotes"] or 0) + 2 * (r["bookmarks"] or 0)
+    return sorted(rows, key=lambda r: -r["eng"])
 
 
 # ---------------------------------------------------------------- weekly
@@ -1001,7 +1086,7 @@ def weekly(db, key, sess, sheet):
 # ---------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["cycle", "publish", "review", "research", "plan", "learn", "weekly", "check", "insights", "refresh"])
+    ap.add_argument("cmd", choices=["cycle", "publish", "review", "research", "plan", "learn", "weekly", "check", "insights", "refresh", "competitors"])
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--top-up", action="store_true", help="plan: add posts only for free slots today, keep everything already planned")
@@ -1031,6 +1116,9 @@ def main():
         print(f"{add_insights(sess, sheet, items)} insights added to {INSIGHT_TAB}, {len(load_insights(sess, sheet))} stored.")
     elif a.cmd == "refresh":
         refresh_week(db, key, sess, sheet)
+        competitor_week(db, x, key, sess, sheet)  # runs even if the web research failed
+    elif a.cmd == "competitors":
+        competitor_week(db, x, key, sess, sheet)
     elif a.cmd == "publish":
         publish(db, x, sess, sheet, a.dry_run)
     elif a.cmd == "review":

@@ -64,5 +64,9 @@
     "trade_in": "Trading in gold jewellery for cash, or upgrading jewellery to investment-grade bars: how it works and what people should know.",
     "the_shop": "Big Bullion itself, only from FACTS. Invite readers to visit or message us. Never invent offers, prices or hours."
   },
-  "research_brief": "gold and silver spot prices and the week's move; this week's Fed, US inflation and jobs events and what markets expect; named analyst views and forecasts with dates; central bank buying and gold ETF flows; oil and Middle East news moving metals; Singapore bullion news such as GST, MAS and jeweller or retail demand"
+  "research_brief": "gold and silver spot prices and the week's move; this week's Fed, US inflation and jobs events and what markets expect; named analyst views and forecasts with dates; central bank buying and gold ETF flows; oil and Middle East news moving metals; Singapore bullion news such as GST, MAS and jeweller or retail demand",
+  "competitors": [
+    "BullionStar"
+  ],
+  "competitor_posts": 40
 }

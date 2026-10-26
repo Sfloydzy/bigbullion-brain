@@ -162,8 +162,8 @@
     },
     {
       "id": "x_refresh",
-      "name": "Weekly research refresh",
-      "description": "Sunday 21:00 SGT. Retires expired search_insights rows, researches the week ahead on the web (prices, Fed and data calendar, analyst views, oil, Singapore news) and stores dated, sourced rows. Uses the Anthropic key with web search.",
+      "name": "Weekly research and competitor review",
+      "description": "Sunday 21:00 SGT. Retires expired search_insights rows, researches the week ahead on the web (prices, Fed and data calendar, analyst views, oil, Singapore news), then reads competitors' posts from the past week, compares best and weakest, and stores lessons and test ideas for the coming week.",
       "script": "x_agent/x_engine.py",
       "args": [
         "refresh"
