@@ -590,17 +590,28 @@ def claude_web(system, user, key, model, max_uses=12, max_tokens=8000):
 
 
 def last_json_list(text):
-    """The JSON list of objects in a reply, however it is laid out or fenced."""
-    starts = [m.start() for m in re.finditer(r"\[\s*\{", text)]
-    ends = [m.end() for m in re.finditer(r"\}\s*\]", text)]
-    if not starts or not ends or ends[-1] < starts[0]:
+    """The JSON objects in a reply's list. Strips citation tags the web search tool adds and keeps every complete item
+    even if the reply was cut off before the list closed."""
+    text = re.sub(r"</?cite[^>]*>", "", text)
+    m = re.search(r"\[\s*\{", text)
+    if not m:
         raise RuntimeError(f"No JSON list in the research reply. It began: {text.strip()[:300]!r}")
-    for a in starts:
+    dec, i, items = json.JSONDecoder(), m.end() - 1, []
+    while True:
         try:
-            return json.loads(text[a:ends[-1]])
+            obj, j = dec.raw_decode(text, i)
         except ValueError:
-            continue
-    raise RuntimeError(f"The research reply held a list that was not valid JSON. It began: {text[starts[0]:starts[0] + 200]!r}")
+            break
+        items.append(obj)
+        k = j
+        while k < len(text) and text[k] in " \n\r\t,":
+            k += 1
+        if k >= len(text) or text[k] != "{":
+            break
+        i = k
+    if not items:
+        raise RuntimeError(f"The research reply held no valid JSON items. It began: {text[m.start():m.start() + 300]!r}")
+    return items
 
 
 def retire_expired(sess, sheet):
@@ -629,14 +640,14 @@ def refresh_week(db, key, sess, sheet):
               "and followers will be reading about this coming week. Report only figures, dates and quotes that appear in a page you actually "
               "read; never your own forecasts or recollections. Prefer primary sources (central banks, statistics agencies, the EIA, the World "
               "Gold Council, the LBMA) and established news (Reuters, Kitco, CNA, The Straits Times). Plain English, no em dashes, no hype. "
-              "Reply with only a JSON list, at most 14 items: [{\"date\": \"YYYY-MM-DD the source was published\", \"topic\": \"...\", "
+              "Reply with only a JSON list, at most 12 items, no markdown, no citation tags, no text before or after it: [{\"date\": \"YYYY-MM-DD the source was published\", \"topic\": \"...\", "
               "\"insight\": \"one or two sentences with the figures exactly as stated and who said it\", \"source\": \"publisher and named analyst\", "
               "\"url\": \"...\", \"confidence\": \"high (primary source or two agreeing sources), medium or low\", "
               "\"expires\": \"YYYY-MM-DD\"}]. expires: prices 7 days out, an event note the day after the event, an outlook report about 30 days, "
               "leave blank only for lasting facts.")
     user = f"Today is {today:%A %d %B %Y} in Singapore. Cover: {brief}. Skip anything you cannot source with a URL."
     try:
-        items = last_json_list(claude_web(system, user, key, CFG["analyst_model"]))
+        items = last_json_list(claude_web(system, user, key, CFG["analyst_model"], max_tokens=16000))
     except Exception as e:
         print(f"Research refresh failed, keeping what is stored: {e}")
         return
