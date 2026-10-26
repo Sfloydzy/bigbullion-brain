@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Tasks</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#14161a;--mute:#6b7280;--line:#e4e7ec;--ok:#15803d;--bad:#b91c1c;--warn:#b45309;--run:#1d4ed8;--accent:#14161a}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1014;--card:#171a20;--ink:#eceef2;--mute:#98a1b0;--line:#262b33;--ok:#4ade80;--bad:#f87171;--warn:#fbbf24;--run:#60a5fa;--accent:#eceef2}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,Segoe UI,sans-serif}
+main{max-width:920px;margin:0 auto;padding:24px 16px 64px}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:16px}
+h1{font-size:22px;margin:0}
+.sub{color:var(--mute);font-size:13px}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.pill{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 12px;font-size:13px;display:flex;gap:8px;align-items:center}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--mute)}
+.dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}.dot.run{background:var(--run)}.dot.warn{background:var(--warn)}
+.banner{border:1px solid var(--bad);color:var(--bad);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:12px}
+.row{display:flex;gap:14px;align-items:flex-start;justify-content:space-between}
+.title{font-weight:600;font-size:16px}
+.desc{color:var(--mute);font-size:13px;margin-top:2px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-top:14px}
+.k{color:var(--mute);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.v{font-size:14px;margin-top:2px}
+.v small{color:var(--mute)}
+.switch{position:relative;width:46px;height:26px;flex:none}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;inset:0;border-radius:26px;background:var(--line);cursor:pointer;transition:.15s}
+.slider:before{content:"";position:absolute;width:20px;height:20px;left:3px;top:3px;border-radius:50%;background:#fff;transition:.15s}
+input:checked+.slider{background:var(--ok)}
+input:checked+.slider:before{transform:translateX(20px)}
+input:disabled+.slider{opacity:.4;cursor:not-allowed}
+button{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:6px 12px;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--ink)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.tools{display:flex;gap:8px;margin-top:14px;align-items:center;flex-wrap:wrap}
+details{margin-top:12px}
+summary{cursor:pointer;color:var(--mute);font-size:13px}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;font-size:12px;white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;margin:8px 0 0}
+.hist{display:flex;gap:3px;align-items:center}
+.hist i{width:8px;height:18px;border-radius:2px;background:var(--mute);opacity:.5}
+.hist i.ok{background:var(--ok);opacity:1}.hist i.bad{background:var(--bad);opacity:1}
+.tag{font-size:11px;border:1px solid var(--line);border-radius:6px;padding:1px 6px;color:var(--mute);margin-left:8px;vertical-align:middle}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Agent tasks</h1>
+      <div class="sub" id="clock">Singapore time</div>
+    </div>
+    <div class="bar">
+      <div class="pill"><span class="dot" id="runnerDot"></span><span id="runnerText">Checking runner</span></div>
+      <button id="pauseBtn">Pause all</button>
+    </div>
+  </header>
+  <div id="banner"></div>
+  <div id="list"></div>
+  <p class="sub">Switches only take effect while the runner is ticking (Windows Task Scheduler, once a minute). Times are Singapore time. Edit schedules in tasks.json.</p>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const el = (tag, props = {}, ...kids) => {
+  const n = Object.assign(document.createElement(tag), props);
+  kids.flat().forEach(k => n.append(k));
+  return n;
+};
+const fmt = iso => iso ? new Date(iso).toLocaleString("en-GB", {timeZone:"Asia/Singapore", day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit", hour12:false}) : "";
+function rel(iso, nowIso) {
+  if (!iso) return "";
+  let s = Math.round((new Date(iso) - new Date(nowIso)) / 1000);
+  const past = s < 0; s = Math.abs(s);
+  const t = s < 60 ? "under a minute" : s < 3600 ? Math.round(s/60) + " min" : s < 86400 ? (s/3600).toFixed(1) + " h" : (s/86400).toFixed(1) + " days";
+  return past ? t + " ago" : "in " + t;
+}
+async function api(path, body) {
+  const r = await fetch(path, body ? {method:"POST", headers:{"X-Dash":"1","Content-Type":"application/json"}, body:JSON.stringify(body)} : {});
+  return r.json();
+}
+let paused = false;
+function render(d) {
+  paused = d.paused;
+  $("#clock").textContent = "Singapore time: " + fmt(d.now);
+  const alive = d.runner_age !== null && d.runner_age < 180;
+  $("#runnerDot").className = "dot " + (alive ? "ok" : "bad");
+  $("#runnerText").textContent = alive ? "Runner active (last tick " + Math.round(d.runner_age) + "s ago)" : (d.runner_age === null ? "Runner has never ticked" : "Runner stopped (" + Math.round(d.runner_age/60) + " min ago)");
+  const pb = $("#pauseBtn");
+  pb.textContent = paused ? "Resume all" : "Pause all";
+  $("#banner").replaceChildren(
+    !alive ? el("div", {className:"banner", textContent:"The runner is not ticking, so no task will fire on schedule. Set up the Task Scheduler entry for runner.py."}) : "",
+    paused ? el("div", {className:"banner", textContent:"All tasks are paused. Nothing will run on schedule until you resume."}) : ""
+  );
+  $("#list").replaceChildren(...d.tasks.map(t => card(t, d)));
+}
+function card(t, d) {
+  let dot = "", label = "";
+  if (!t.built) { dot = "warn"; label = "Not built yet"; }
+  else if (t.running) { dot = "run"; label = "Running now"; }
+  else if (t.last_ok === false) { dot = "bad"; label = "Last run failed"; }
+  else if (t.last_ok === true) { dot = "ok"; label = "Last run OK"; }
+  else { label = "Never run"; }
+  const sw = el("label", {className:"switch"},
+    el("input", {type:"checkbox", checked:t.enabled, disabled:!t.built, onchange: async () => { await api("/api/toggle", {id:t.id}); load(); }}),
+    el("span", {className:"slider"}));
+  const nextTxt = !t.built ? "Not scheduled" : !t.enabled ? "Off" : paused ? "Paused" : fmt(t.next_run);
+  const nextRel = t.enabled && !paused && t.built ? rel(t.next_run, d.now) : "";
+  const hist = el("div", {className:"hist"}, t.history.map(h => el("i", {className:h.ok ? "ok" : "bad", title:fmt(h.at) + " (" + h.trigger + ")"})));
+  return el("div", {className:"card"},
+    el("div", {className:"row"},
+      el("div", {},
+        el("div", {className:"title"}, t.name, t.built ? "" : el("span", {className:"tag", textContent:"planned"})),
+        el("div", {className:"desc", textContent:t.description})),
+      sw),
+    el("div", {className:"grid"},
+      el("div", {}, el("div", {className:"k", textContent:"Status"}), el("div", {className:"v"}, el("span", {className:"pill", style:"display:inline-flex"}, el("span", {className:"dot " + dot}), label))),
+      el("div", {}, el("div", {className:"k", textContent:"Schedule"}), el("div", {className:"v", textContent:t.schedule})),
+      el("div", {}, el("div", {className:"k", textContent:"Next run"}), el("div", {className:"v"}, nextTxt, nextRel ? el("small", {textContent:"  " + nextRel}) : "")),
+      el("div", {}, el("div", {className:"k", textContent:"Last run"}), el("div", {className:"v"}, t.last_run ? fmt(t.last_run) : "Never", t.last_run ? el("small", {textContent:"  " + rel(t.last_run, d.now) + (t.last_trigger ? ", " + t.last_trigger : "")}) : ""))),
+    el("div", {className:"tools"},
+      el("button", {textContent:t.running ? "Running..." : "Run now", disabled:!t.built || t.running, onclick: async () => { await api("/api/run", {id:t.id}); setTimeout(load, 500); }}),
+      t.history.length ? hist : ""),
+    t.last_output ? el("details", {}, el("summary", {textContent:"Last output" + (t.last_seconds != null ? " (" + t.last_seconds + "s)" : "")}), el("pre", {textContent:t.last_output})) : "");
+}
+async function load() { try { render(await api("/api/status")); } catch (e) { $("#runnerText").textContent = "Dashboard server not reachable"; } }
+$("#pauseBtn").onclick = async () => { await api("/api/pause", {paused:!paused}); load(); };
+load(); setInterval(load, 5000);
+</script>
+</body>
+</html>

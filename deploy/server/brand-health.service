@@ -1,0 +1,6 @@
+[Unit]
+Description=Brand engine server health check
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/brand-health

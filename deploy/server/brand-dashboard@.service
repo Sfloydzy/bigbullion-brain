@@ -1,0 +1,14 @@
+[Unit]
+Description=Brand engine dashboard for %i (localhost only, view through an SSH tunnel)
+After=network.target
+
+[Service]
+User=brand
+EnvironmentFile=-/etc/brand-dashboard/%i.env
+WorkingDirectory=/srv/brands/%i/dashboard
+ExecStart=/usr/bin/python3 /srv/brands/%i/dashboard/dashboard.py
+Restart=on-failure
+MemoryMax=150M
+
+[Install]
+WantedBy=multi-user.target

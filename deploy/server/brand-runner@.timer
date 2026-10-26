@@ -1,0 +1,10 @@
+[Unit]
+Description=Brand engine tick every minute for %i
+
+[Timer]
+OnCalendar=minutely
+AccuracySec=1s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

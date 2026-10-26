@@ -1,0 +1,30 @@
+# Only the social media system is tracked. Everything else in C:\agents stays local.
+/*
+!/.gitignore
+!/README.md
+!/requirements.txt
+!/brain/
+!/threads_agent/
+!/x_agent/
+!/dashboard/
+!/brand/
+!/deploy/
+!/.gitattributes
+
+# Never commit secrets
+.env
+*.env
+google_service_account.json
+
+# Local data and run state (back these up separately)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+__pycache__/
+dashboard/state.json
+dashboard/heartbeat.json
+*/reviews/
+
+# Not used by this brand
+threads_agent/etf_facts.json

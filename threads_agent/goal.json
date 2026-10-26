@@ -1,0 +1,23 @@
+{
+  "start_date": "2026-10-26",
+  "target": 1000,
+  "target_date": "2027-01-24",
+  "milestones": [
+    {
+      "week": 2,
+      "followers": 50
+    },
+    {
+      "week": 5,
+      "followers": 200
+    },
+    {
+      "week": 8,
+      "followers": 500
+    },
+    {
+      "week": 13,
+      "followers": 1000
+    }
+  ]
+}

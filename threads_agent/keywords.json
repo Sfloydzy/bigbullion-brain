@@ -1,0 +1,88 @@
+{
+  "keywords": [
+    {
+      "q": "gold bullion",
+      "pillar": "bullion_basics"
+    },
+    {
+      "q": "silver bullion",
+      "pillar": "bullion_basics"
+    },
+    {
+      "q": "gold coins",
+      "pillar": "bullion_basics"
+    },
+    {
+      "q": "gold bars",
+      "pillar": "bullion_basics"
+    },
+    {
+      "q": "fake gold",
+      "pillar": "bullion_basics"
+    },
+    {
+      "q": "999.9 gold",
+      "pillar": "bullion_basics"
+    },
+    {
+      "q": "buying gold",
+      "pillar": "buying_and_dca"
+    },
+    {
+      "q": "silver stacking",
+      "pillar": "buying_and_dca"
+    },
+    {
+      "q": "DCA gold",
+      "pillar": "buying_and_dca"
+    },
+    {
+      "q": "dollar cost averaging gold",
+      "pillar": "buying_and_dca"
+    },
+    {
+      "q": "buy silver",
+      "pillar": "buying_and_dca"
+    },
+    {
+      "q": "gold price",
+      "pillar": "market_context"
+    },
+    {
+      "q": "silver price",
+      "pillar": "market_context"
+    },
+    {
+      "q": "central banks gold",
+      "pillar": "market_context"
+    },
+    {
+      "q": "gold forecast",
+      "pillar": "market_context"
+    },
+    {
+      "q": "gold silver ratio",
+      "pillar": "market_context"
+    },
+    {
+      "q": "sell gold jewellery",
+      "pillar": "trade_in"
+    },
+    {
+      "q": "gold jewellery cash",
+      "pillar": "trade_in"
+    },
+    {
+      "q": "scrap gold",
+      "pillar": "trade_in"
+    },
+    {
+      "q": "Singapore gold",
+      "pillar": "the_shop"
+    },
+    {
+      "q": "gold shop Singapore",
+      "pillar": "the_shop"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+[Unit]
+Description=Brand engine tick for %i
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=brand
+WorkingDirectory=/srv/brands/%i/dashboard
+ExecStart=/srv/brands/%i/.venv/bin/python /srv/brands/%i/dashboard/runner.py
+MemoryMax=700M
+Nice=5
+TimeoutStartSec=900

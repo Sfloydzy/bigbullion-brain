@@ -1,0 +1,195 @@
+{
+  "tasks": [
+    {
+      "id": "publisher",
+      "name": "Threads publisher",
+      "description": "Posts approved, due rows from the Google Sheet queue to Threads.",
+      "script": "threads_agent/publisher.py",
+      "args": [],
+      "schedule": {
+        "type": "interval",
+        "minutes": 5
+      },
+      "timeout": 120,
+      "enabled": false
+    },
+    {
+      "id": "token_refresh",
+      "name": "Threads token refresh",
+      "description": "Refreshes the 60 day Threads access token and saves it to .env.",
+      "script": "threads_agent/refresh_token.py",
+      "args": [],
+      "schedule": {
+        "type": "weekly",
+        "day": "mon",
+        "time": "03:00"
+      },
+      "timeout": 60,
+      "enabled": false
+    },
+    {
+      "id": "threads_research",
+      "name": "Threads researcher",
+      "description": "Searches your keywords on Threads, stores posts and engagement snapshots, ranks them, and writes the top 25 to the research tab.",
+      "script": "threads_agent/researcher.py",
+      "args": [
+        "run"
+      ],
+      "schedule": {
+        "type": "interval",
+        "minutes": 180
+      },
+      "timeout": 300,
+      "enabled": false
+    },
+    {
+      "id": "insights",
+      "name": "Threads insights pull",
+      "description": "Reads views, likes, replies, reposts and your follower count, and refreshes the insights and followers tabs.",
+      "script": "threads_agent/insights.py",
+      "args": [
+        "pull"
+      ],
+      "schedule": {
+        "type": "interval",
+        "minutes": 180
+      },
+      "enabled": false,
+      "timeout": 300
+    },
+    {
+      "id": "weekly_review",
+      "name": "Weekly look-back",
+      "description": "Monday 09:00. Week in numbers, what worked, what did not, a verdict on every experiment we ran, 3 tests for next week and a goal-path check. Writes the weekly tab and reviews/weekly_DATE.md.",
+      "script": "threads_agent/engine.py",
+      "args": [
+        "weekly"
+      ],
+      "schedule": {
+        "type": "weekly",
+        "day": "mon",
+        "time": "09:00"
+      },
+      "timeout": 600,
+      "enabled": false
+    },
+    {
+      "id": "self_improve",
+      "name": "Content top-up + daily brief",
+      "description": "Checks every 3 hours and writes a new batch of 48 only when the queue runs less than 20 hours ahead, so posting never gaps. Every post is auto-approved. Each batch also writes the daily_brief tab: learnings from the last batch and what we are testing next.",
+      "script": "threads_agent/engine.py",
+      "args": [
+        "run"
+      ],
+      "schedule": {
+        "type": "interval",
+        "minutes": 180
+      },
+      "timeout": 900,
+      "enabled": false
+    },
+    {
+      "id": "research",
+      "name": "Content drafts from research",
+      "description": "Planned: Claude analyses the top research posts and adds original draft rows to the queue (approved left blank).",
+      "script": null,
+      "args": [],
+      "schedule": {
+        "type": "interval",
+        "minutes": 360
+      },
+      "enabled": false
+    },
+    {
+      "id": "replace_unapproved",
+      "name": "Replace unapproved posts",
+      "description": "Every 10 minutes. If you untick approved on a queued engine post, a fresh replacement is written into the same slot and auto-approved. Unticked posts never publish. Your rejections also teach the engine what to avoid.",
+      "script": "threads_agent/engine.py",
+      "args": [
+        "replace"
+      ],
+      "schedule": {
+        "type": "interval",
+        "minutes": 10
+      },
+      "timeout": 300,
+      "enabled": false
+    },
+    {
+      "id": "x_publish",
+      "name": "X publisher",
+      "description": "Posts due rows from the x_queue tab to X, one per run, and swaps a reserve into any unticked post.",
+      "script": "x_agent/x_engine.py",
+      "args": [
+        "publish"
+      ],
+      "schedule": {
+        "type": "interval",
+        "minutes": 5
+      },
+      "timeout": 120,
+      "enabled": true
+    },
+    {
+      "id": "x_cycle",
+      "name": "X daily cycle",
+      "description": "Researches X, reviews yesterday's X posts, learns, then writes today's 12 X posts (X only brand).",
+      "script": "x_agent/x_engine.py",
+      "args": [
+        "cycle"
+      ],
+      "schedule": {
+        "type": "daily",
+        "time": "06:00"
+      },
+      "timeout": 900,
+      "enabled": true
+    },
+    {
+      "id": "x_review",
+      "name": "X post review",
+      "description": "Reads X metrics as posts cross 1h, 6h, 24h, 72h and 7d (only then, so reads stay low), verdicts at 24h, x_review tab.",
+      "script": "x_agent/x_engine.py",
+      "args": [
+        "review"
+      ],
+      "schedule": {
+        "type": "interval",
+        "minutes": 30
+      },
+      "timeout": 300,
+      "enabled": true
+    },
+    {
+      "id": "x_weekly",
+      "name": "X weekly look-back",
+      "description": "Monday summary of the X week: what worked, test verdicts, whether Threads winners carry over.",
+      "script": "x_agent/x_engine.py",
+      "args": [
+        "weekly"
+      ],
+      "schedule": {
+        "type": "weekly",
+        "day": "mon",
+        "time": "09:30"
+      },
+      "timeout": 600,
+      "enabled": true
+    },
+    {
+      "id": "brain_sync",
+      "name": "Brain sync",
+      "description": "Pulls Threads and X posts, metrics at fixed ages, follower counts, research and your notes into one ledger; labels posts, attributes follows, scores everything, refreshes brain_scores.",
+      "script": "brain/brain.py",
+      "args": [
+        "sync"
+      ],
+      "schedule": {
+        "type": "interval",
+        "minutes": 30
+      },
+      "timeout": 300,
+      "enabled": true
+    }
+  ]
+}

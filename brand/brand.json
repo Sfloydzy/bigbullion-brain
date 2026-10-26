@@ -1,0 +1,193 @@
+{
+  "_about": "Everything brand-specific lives here. X only brand (modules.threads false). See deploy/DEPLOY.md.",
+  "name": "Big Bullion",
+  "handles": {
+    "threads": "",
+    "x": ""
+  },
+  "timezone": {
+    "label": "Singapore",
+    "iana": "Asia/Singapore",
+    "utc_offset_hours": 8
+  },
+  "topics": "gold and silver education (how bullion works, premiums, buying and storing, spotting fakes, coins vs bars), DCA into gold and silver, trading in gold jewellery for cash or upgrading to investment-grade bars, gold and silver market context, and the shop itself, for Singapore collectors and first-time buyers",
+  "topics_short": "gold and silver education, DCA, trade-ins, market context, the shop",
+  "research_topics": "gold and silver bullion, precious metals markets, buying and selling gold, silver stacking",
+  "author_story": "Big Bullion is a gold and silver bullion shop in Singapore that serves collectors and first-time buyers. Posts speak as the shop ('we').",
+  "author_short": "a Singapore gold and silver bullion shop",
+  "author_facts": [
+    "We sell gold and silver bullion to collectors and first-time buyers in Singapore.",
+    "We buy gold for cash, including gold jewellery.",
+    "Customers can trade in gold jewellery and upgrade to investment-grade bars."
+  ],
+  "market_notes": [],
+  "voice": "Trustworthy, plain-spoken and knowledgeable. Explain simply, like an honest dealer talking to a first-time buyer. Short sentences, one idea per post. Never hype.",
+  "first_person_rule": "speak as the shop ('we'); first person only for the FACTS about the shop; never invent customer stories, reviews, stock, prices, promotions or opening hours",
+  "post_rules": "Education first. Never predict prices in our own voice and never say gold or silver will go up. Never promise or imply guaranteed returns, and never call bullion a 'safe investment', 'risk-free' or something you 'can't lose' on. Never tell readers they should buy as an investment instruction; explaining how something works, and inviting readers to visit or message us about our services, is fine. Never quote prices, premiums, spreads, returns or percentages unless they are given under MARKET NOTES. Analyst forecasts may only come from MARKET NOTES, always name the source and date, present them as that source's view, and say forecasts can be wrong. Never mention a digital gold program. No tax or legal claims. No disclaimers such as 'not financial advice'.",
+  "x_rules": "no own price predictions; no guaranteed returns or 'safe investment'; no prices or percentages unless from market notes; analyst views only from market notes, named and dated; never mention a digital gold program",
+  "proof_note": "named_assets = named coins, bars, mints or refiners",
+  "pillars": {
+    "bullion_basics": [
+      "Gold"
+    ],
+    "buying_and_dca": [
+      "Investing"
+    ],
+    "market_context": [
+      "Gold"
+    ],
+    "trade_in": [
+      "Gold"
+    ],
+    "the_shop": [
+      "Gold"
+    ]
+  },
+  "topic_groups": [
+    "how bullion works",
+    "purity and hallmarks",
+    "premiums and spreads",
+    "coins vs bars",
+    "storage",
+    "spotting fakes",
+    "DCA into gold",
+    "DCA into silver",
+    "gold jewellery trade-in",
+    "market news and analyst views",
+    "central banks and gold",
+    "gold vs silver",
+    "the shop",
+    "other"
+  ],
+  "research_keywords": [
+    {
+      "q": "gold bullion",
+      "pillar": "bullion_basics"
+    },
+    {
+      "q": "silver bullion",
+      "pillar": "bullion_basics"
+    },
+    {
+      "q": "gold coins",
+      "pillar": "bullion_basics"
+    },
+    {
+      "q": "gold bars",
+      "pillar": "bullion_basics"
+    },
+    {
+      "q": "fake gold",
+      "pillar": "bullion_basics"
+    },
+    {
+      "q": "999.9 gold",
+      "pillar": "bullion_basics"
+    },
+    {
+      "q": "buying gold",
+      "pillar": "buying_and_dca"
+    },
+    {
+      "q": "silver stacking",
+      "pillar": "buying_and_dca"
+    },
+    {
+      "q": "DCA gold",
+      "pillar": "buying_and_dca"
+    },
+    {
+      "q": "dollar cost averaging gold",
+      "pillar": "buying_and_dca"
+    },
+    {
+      "q": "buy silver",
+      "pillar": "buying_and_dca"
+    },
+    {
+      "q": "gold price",
+      "pillar": "market_context"
+    },
+    {
+      "q": "silver price",
+      "pillar": "market_context"
+    },
+    {
+      "q": "central banks gold",
+      "pillar": "market_context"
+    },
+    {
+      "q": "gold forecast",
+      "pillar": "market_context"
+    },
+    {
+      "q": "gold silver ratio",
+      "pillar": "market_context"
+    },
+    {
+      "q": "sell gold jewellery",
+      "pillar": "trade_in"
+    },
+    {
+      "q": "gold jewellery cash",
+      "pillar": "trade_in"
+    },
+    {
+      "q": "scrap gold",
+      "pillar": "trade_in"
+    },
+    {
+      "q": "Singapore gold",
+      "pillar": "the_shop"
+    },
+    {
+      "q": "gold shop Singapore",
+      "pillar": "the_shop"
+    }
+  ],
+  "goal": {
+    "start_date": "2026-10-26",
+    "target": 1000,
+    "target_date": "2027-01-24",
+    "milestones": [
+      {
+        "week": 2,
+        "followers": 50
+      },
+      {
+        "week": 5,
+        "followers": 200
+      },
+      {
+        "week": 8,
+        "followers": 500
+      },
+      {
+        "week": 13,
+        "followers": 1000
+      }
+    ]
+  },
+  "modules": {
+    "threads": false,
+    "etf_facts": false,
+    "x": true,
+    "brain": true,
+    "supabase": false
+  },
+  "allowed_figures": [
+    "99.99%",
+    "99.9%",
+    "999.9",
+    "999",
+    "91.6%",
+    "75%",
+    "58.5%",
+    "24k",
+    "22k",
+    "18k",
+    "14k",
+    "1 oz",
+    "31.1 g"
+  ]
+}

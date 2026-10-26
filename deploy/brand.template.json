@@ -1,0 +1,33 @@
+{
+  "_about": "Copy to brand/brand.json and fill every field. Claude fills this from the brand interview in deploy/DEPLOY.md, step 1.",
+  "name": "First name or brand name",
+  "handles": {"threads": "threads_username_without_at", "x": "x_username_without_at"},
+  "timezone": {"label": "Singapore", "iana": "Asia/Singapore", "utc_offset_hours": 8},
+  "topics": "the 3 to 6 subjects the brand posts about, written as one phrase, e.g. 'fitness, nutrition, discipline and running a gym'",
+  "topics_short": "same subjects as a short comma list",
+  "research_topics": "the subjects to watch on X, as one phrase",
+  "author_story": "One or two sentences of TRUE background the writer may lean on. Example: 'The author is a physio who opened her own clinic and shares what she learns in public.'",
+  "author_short": "the same story as a clause starting 'whose author ...'",
+  "voice": "Tone in 2 to 4 short sentences, ending with a full stop. Example: 'warm, practical, a little funny. Short sentences. No jargon.'",
+  "first_person_rule": "what the writer may say in first person, e.g. 'first person is only for the fact that the author runs a clinic'",
+  "post_rules": "Topic-specific hard rules as full sentences. Include compliance rules for regulated topics (finance, health, legal) and any phrases the owner never wants.",
+  "x_rules": "the same rules, short, separated by semicolons, for X posts",
+  "proof_note": "named_assets = named products, tools or brands",
+  "pillars": {
+    "pillar_one": ["Threads topic tag 1", "Threads topic tag 2"],
+    "pillar_two": ["Threads topic tag"],
+    "pillar_three": ["Threads topic tag"]
+  },
+  "topic_groups": ["10 to 15 specific sub-topics the brain should track", "...", "personal story", "other"],
+  "research_keywords": [
+    {"q": "keyword phrase people actually search", "pillar": "pillar_one"},
+    {"q": "another phrase", "pillar": "pillar_two"}
+  ],
+  "goal": {
+    "start_date": "YYYY-MM-DD",
+    "target": 10000,
+    "target_date": "YYYY-MM-DD",
+    "milestones": [{"week": 2, "followers": 800}, {"week": 5, "followers": 2500}, {"week": 8, "followers": 5000}, {"week": 13, "followers": 10000}]
+  },
+  "modules": {"etf_facts": false, "x": true, "brain": true, "supabase": true}
+}

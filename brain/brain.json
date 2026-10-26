@@ -1,0 +1,16 @@
+{
+  "label_model": "claude-sonnet-5-5",
+  "weights": {"follow": 25, "repost": 5, "quote": 5, "reply": 3, "share": 3, "bookmark": 3, "like": 1},
+  "quality_mix": 0.6,
+  "reach_mix": 0.4,
+  "view_smoothing": 100,
+  "baseline_days": 30,
+  "min_baseline_posts": 5,
+  "x_follower_every_hours": 3,
+  "pillars": ["money", "sales", "entrepreneurship", "dropout", "mindset"],
+  "topic_groups": ["investing and ETFs", "compounding", "saving and budgeting", "money mistakes", "sales and objections",
+                   "pricing", "starting a business", "AI and tools", "building in public", "dropping out and education",
+                   "discipline and habits", "mindset", "personal story", "other"],
+  "angles": ["contrarian", "how_to", "story", "observation", "question", "list", "stat", "mistake", "prediction", "other"],
+  "proofs": ["personal_story", "real_numbers", "named_assets", "opinion", "question", "none"]
+}
