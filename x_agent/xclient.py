@@ -74,12 +74,18 @@ class X:
         if body is not None:
             data = json.dumps(body).encode()
             headers["Content-Type"] = "application/json"
-        req = urllib.request.Request(full, data=data, method=method, headers=headers)
-        try:
-            with urllib.request.urlopen(req, timeout=30) as r:
-                return json.loads(r.read().decode() or "{}")
-        except urllib.error.HTTPError as e:
-            raise XError(e.code, e.read().decode(errors="replace")) from None
+        tries = 2 if method == "GET" else 1  # reads retry once; posts never retry, a timed-out post may already be live
+        for attempt in range(tries):
+            req = urllib.request.Request(full, data=data, method=method, headers=headers)
+            try:
+                with urllib.request.urlopen(req, timeout=45) as r:
+                    return json.loads(r.read().decode() or "{}")
+            except urllib.error.HTTPError as e:
+                raise XError(e.code, e.read().decode(errors="replace")) from None
+            except (urllib.error.URLError, TimeoutError, OSError) as e:
+                if attempt + 1 == tries:
+                    raise XError("network", f"{method} {path} failed: {e}") from None
+                time.sleep(3)
 
     # ------------------------------------------------------------ endpoints
     def me(self):
