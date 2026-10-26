@@ -303,10 +303,10 @@ def rewrite(items, ctx, key, seen):
     return out
 
 
-def plan(db, tdb, key, sess, sheet, dry=False, force=False, top_up=False):
-    today = now_sgt().date()
+def plan(db, tdb, key, sess, sheet, dry=False, force=False, top_up=False, day_offset=0):
+    today = now_sgt().date() + timedelta(days=day_offset)  # day_offset 1 plans tomorrow's slots ahead of time
     if not (force or top_up) and db.execute("SELECT COUNT(*) c FROM x_posts WHERE day=?", (today.isoformat(),)).fetchone()["c"]:
-        print("Today is already planned. Use --force to plan again.")
+        print(f"{today} is already planned. Use --force to plan again.")
         return
     cutoff = now_sgt() + timedelta(minutes=10)
     xinfo = x_learn(db)
@@ -847,6 +847,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--top-up", action="store_true", help="plan: add posts only for free slots today, keep everything already planned")
+    ap.add_argument("--day", choices=["today", "tomorrow"], default="today", help="plan: tomorrow plans the next day's slots now, so you can review them before they post")
     ap.add_argument("--no-search", action="store_true", help="research: rebuild the tab from stored posts, no new reads")
     ap.add_argument("--from", dest="src", help="insights: JSON list of rows to add to the search_insights tab")
     ap.add_argument("--db", default=str(DB_PATH))
@@ -885,7 +886,7 @@ def main():
                     fn()
                 except Exception as e:
                     print(f"{name} failed, carrying on: {e}")
-        plan(db, tdb, key, sess, sheet, a.dry_run, a.force, a.top_up)
+        plan(db, tdb, key, sess, sheet, a.dry_run, a.force, a.top_up, 1 if a.day == "tomorrow" else 0)
         print(f"Reads used today: {usage(db, 'reads')} of {CFG['max_reads_per_day']}.")
 
 
