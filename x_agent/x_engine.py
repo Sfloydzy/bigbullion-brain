@@ -378,10 +378,68 @@ def plan(db, tdb, key, sess, sheet, dry=False, force=False, top_up=False):
 
 
 # ---------------------------------------------------------------- plan, X only (brand has no Threads)
-MARKET_NOTES = brandkit.B.get("market_notes", [])
+def _live(m, today=None):
+    today = today or datetime.now(SGT).date().isoformat()
+    return not str(m.get("expires", "")).strip() or str(m["expires"]).strip() >= today
+
+
+MARKET_NOTES = [m for m in brandkit.B.get("market_notes", []) if _live(m)]
 MONEY_RE = re.compile(r"(?:S\$|US\$|\$|SGD|USD)\s?\d[\d,]*(?:\.\d+)?\s*(?:k|m|million|billion)?|\d[\d,]*(?:\.\d+)?\s?%", re.I)
 MARKET_NUMS = th._nums(" ".join(f"{m.get('note', '')}" for m in MARKET_NOTES))
 MARKET_NUMS |= th._nums(" ".join(brandkit.B.get("allowed_figures", [])))  # e.g. purity figures that are general knowledge
+
+
+# ---------------------------------------------------------------- search_insights tab (research store)
+INSIGHT_TAB = "search_insights"
+INSIGHT_HEAD = ["date", "kind", "topic", "insight", "source", "url", "confidence", "status", "expires", "used_in_posts"]
+
+
+def load_insights(sess, sheet):
+    """Rows of the search_insights tab as dicts (row number under _row). Creates the tab with a header if it is new."""
+    ensure_tab(sess, sheet, INSIGHT_TAB)
+    r = sess.get(f"{SHEETS_BASE}/{sheet}/values/{INSIGHT_TAB}!A1:Z2000")
+    r.raise_for_status()
+    vals = r.json().get("values", [])
+    if not vals:
+        sess.put(f"{SHEETS_BASE}/{sheet}/values/{INSIGHT_TAB}!A1?valueInputOption=RAW", json={"values": [INSIGHT_HEAD]}).raise_for_status()
+        return []
+    head = [h.strip().lower() for h in vals[0]]
+    return [dict(zip(head, row + [""] * (len(head) - len(row))), _row=i) for i, row in enumerate(vals[1:], start=2)]
+
+
+def add_insights(sess, sheet, items):
+    """Append new insights, skipping ones already stored (same date and first 60 characters)."""
+    have = {(r.get("date", "").strip(), r.get("insight", "").strip()[:60]) for r in load_insights(sess, sheet)}
+    rows = [[str(i.get(c, "")) for c in INSIGHT_HEAD] for i in items if (str(i.get("date", "")).strip(), str(i.get("insight", "")).strip()[:60]) not in have]
+    if rows:
+        n = len(have) + 2
+        sess.put(f"{SHEETS_BASE}/{sheet}/values/{INSIGHT_TAB}!A{n}?valueInputOption=RAW", json={"values": rows}).raise_for_status()
+    return len(rows)
+
+
+def refresh_market_notes(sess, sheet):
+    """Brand notes plus every search_insights row marked status=use and not expired. Returns research learnings for the writer."""
+    global MARKET_NOTES, MARKET_NUMS
+    today = datetime.now(SGT).date().isoformat()
+    notes = [m for m in brandkit.B.get("market_notes", []) if _live(m, today)]
+    learnings = []
+    try:
+        rows = load_insights(sess, sheet)
+    except Exception as e:
+        print(f"Could not read {INSIGHT_TAB}, using brand notes only: {e}")
+        rows = []
+    for r in rows:
+        txt = r.get("insight", "").strip()
+        if not txt or r.get("status", "").strip().lower() != "use" or not _live(r, today):
+            continue
+        if r.get("kind", "").strip().lower() == "learning":
+            learnings.append(txt)
+        else:
+            notes.append({"source": r.get("source", "").strip(), "date": r.get("date", "").strip(), "note": txt})
+    MARKET_NOTES = notes
+    MARKET_NUMS = th._nums(" ".join(m.get("note", "") for m in notes)) | th._nums(" ".join(brandkit.B.get("allowed_figures", [])))
+    print(f"Market notes in use: {len(notes)}. Research learnings: {len(learnings)}.")
+    return learnings
 
 
 def money_ok(text):
@@ -407,6 +465,7 @@ def native_system():
 
 
 def plan_native(db, key, sess, sheet, today, slots, base, xinfo, dry):
+    research_learnings = refresh_market_notes(sess, sheet)
     w = CFG.get("pillar_weights") or {}
     pillars = list(brandkit.PILLARS)
     w = {p: float(w.get(p, 0)) for p in pillars} if w and sum(w.values()) > 0 else {p: 1.0 for p in pillars}
@@ -423,6 +482,7 @@ def plan_native(db, key, sess, sheet, today, slots, base, xinfo, dry):
             "pillar_notes": CFG.get("pillar_notes", {}),
             "what_works_on_x": learn_text(xinfo),
             "x_themes_today": json.loads(meta(db, "themes") or "[]"),
+            "research_learnings": research_learnings,
             "do_not_repeat": [t[:110] for t in seen[:60]],
             "avoid_like_these_rejected": [r["text"] for r in db.execute("SELECT text FROM x_rejections ORDER BY at DESC LIMIT 8")],
             "output": "[{\"pillar\": \"...\", \"hook\": \"...\", \"test\": \"... or empty\", \"text\": \"...\"}]"}
@@ -783,11 +843,12 @@ def weekly(db, key, sess, sheet):
 # ---------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["cycle", "publish", "review", "research", "plan", "learn", "weekly", "check"])
+    ap.add_argument("cmd", choices=["cycle", "publish", "review", "research", "plan", "learn", "weekly", "check", "insights"])
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--top-up", action="store_true", help="plan: add posts only for free slots today, keep everything already planned")
     ap.add_argument("--no-search", action="store_true", help="research: rebuild the tab from stored posts, no new reads")
+    ap.add_argument("--from", dest="src", help="insights: JSON list of rows to add to the search_insights tab")
     ap.add_argument("--db", default=str(DB_PATH))
     ap.add_argument("--threads-db", default=str(DB_DEFAULT))
     a = ap.parse_args()
@@ -805,7 +866,10 @@ def main():
         print(learn_text(x_learn(db)))
         return
     sess = sheets_session()
-    if a.cmd == "publish":
+    if a.cmd == "insights":
+        items = json.load(open(a.src, encoding="utf-8")) if a.src else []
+        print(f"{add_insights(sess, sheet, items)} insights added to {INSIGHT_TAB}, {len(load_insights(sess, sheet))} stored.")
+    elif a.cmd == "publish":
         publish(db, x, sess, sheet, a.dry_run)
     elif a.cmd == "review":
         review(db, x, key, sess, sheet)
